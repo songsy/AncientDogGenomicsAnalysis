@@ -131,7 +131,10 @@ def parse_vcf(vcf_file,mask,locus,trf,fasta_file,hg19_seq):
 		info = line[9]
 		chr = line[0]
 		pos = int(line[1])
-		DP = int(info.split(":")[2])
+		try:
+			DP = int(info.split(":")[2])
+		except IndexError:
+			DP = 10
 		if i>=len(locus):
 			break
 		if pos>=locus[i][1] and pos<=locus[i][2]:
@@ -147,6 +150,8 @@ def parse_vcf(vcf_file,mask,locus,trf,fasta_file,hg19_seq):
 				elif string[pos-locus[i][1]]!="N":
 					if line[4]==".":					# reference allele
 						string[pos-locus[i][1]]=line[3]
+						string1[pos-locus[i][1]]=line[3]
+						string2[pos-locus[i][1]]=line[3]
 					else:	# non reference allele
 						genotype = info.split(":")[0]
 						allele = line[4]
@@ -160,14 +165,15 @@ def parse_vcf(vcf_file,mask,locus,trf,fasta_file,hg19_seq):
 							string2[pos-locus[i][1]]=line[3]
 							string1[pos-locus[i][1]]=allele
 							het +=1
-						elif genotype=="1|1":
+						elif genotype=="1|1" or genotype=="1/1":
 							string[pos-locus[i][1]]=allele
 							string1[pos-locus[i][1]]=allele
 							string2[pos-locus[i][1]]=allele
-						elif genotype=="0/1":
+						elif genotype=="0/1" or genotype=="1/0":
 							het +=1
 							random+=1
 							string[pos-locus[i][1]]=annotation[allele+line[3]]
+							'''
 							indicator = binomial(1,0.5)
 							if indicator == 0:
 								string1[pos-locus[i][1]]=line[3]
@@ -175,8 +181,18 @@ def parse_vcf(vcf_file,mask,locus,trf,fasta_file,hg19_seq):
 							else:
 								string2[pos-locus[i][1]]=line[3]
 								string1[pos-locus[i][1]]=allele
+							'''
+							string1[pos-locus[i][1]]="N"
+							string2[pos-locus[i][1]]="N"
+						elif genotype=="0|0":
+							string[pos-locus[i][1]]=line[3]
+							string1[pos-locus[i][1]]=line[3]
+							string2[pos-locus[i][1]]=line[3]
 						else:
 							print 'wrong',line
+							string[pos-locus[i][1]]="N"
+							string1[pos-locus[i][1]]="N"
+							string2[pos-locus[i][1]]="N"
 							continue
 		elif pos>locus[i][2]:
 			seq=""
@@ -291,14 +307,15 @@ def parse_vcf(vcf_file,mask,locus,trf,fasta_file,hg19_seq):
 								string2[pos-locus[i][1]]=line[3]
 								string1[pos-locus[i][1]]=allele
 								het +=1
-							elif genotype=="1|1":
+							elif genotype=="1|1" or genotype=="1/1":
 								string[pos-locus[i][1]]=allele
 								string1[pos-locus[i][1]]=allele
 								string2[pos-locus[i][1]]=allele
-							elif genotype=="0/1":
+							elif genotype=="0/1" or genotype=="1/0":
 								het +=1
 								random+=1
 								string[pos-locus[i][1]]=annotation[allele+line[3]]
+								'''
 								indicator = binomial(1,0.5)
 								if indicator == 0:
 									string1[pos-locus[i][1]]=line[3]
@@ -306,7 +323,17 @@ def parse_vcf(vcf_file,mask,locus,trf,fasta_file,hg19_seq):
 								else:
 									string2[pos-locus[i][1]]=line[3]
 									string1[pos-locus[i][1]]=allele
+								'''
+								string1[pos-locus[i][1]]="N"
+								string2[pos-locus[i][1]]="N"
+							elif genotype=="0|0":
+								string[pos-locus[i][1]]=line[3]
+								string1[pos-locus[i][1]]=line[3]
+								string2[pos-locus[i][1]]=line[3]
 							else:
+								string[pos-locus[i][1]]="N"
+								string1[pos-locus[i][1]]="N"
+								string2[pos-locus[i][1]]="N"
 								print 'wrong2',line
 					break
 				elif pos>locus[i][2]:
@@ -397,8 +424,13 @@ if __name__=="__main__":
 		hg19_seq = read_seq('locus-hg19.fa','chr'+str(chr))
 		locus['chr'+str(chr)].sort( key=lambda w: int(w[1]))    # locus are in hg19
 #		print locus['chr'+str(chr)]
+#		vcf_file = "%s%s/all_sites/%s.chr%s.moleculo.phased.vcf.gz" %(args.vcf_dir,args.sample,args.sample,chr)
+#		mask_file = "%s%s/all_sites/%s_chr%s.mask.bed.gz" %(args.vcf_dir,args.sample,args.sample,chr)
+#		vcf_file = "%s%s/gVCF_calls/%s.chr%s.prism.v2.phased.vcf.gz" %(args.vcf_dir,args.sample,args.sample,chr)
 		vcf_file = "%s%s/gVCF_calls/%s.%s.prism.phased.vcf.gz" %(args.vcf_dir,args.sample,args.sample,chr)
-		mask_file = "%s%s/gVCF_calls/%s_%s.mask.bed.gz" %(args.vcf_dir,args.sample,args.sample,chr)
+		mask_file = "%s%s/gVCF_calls/%s_%s.mask.bed.gz" %(args.vcf_dir,args.sample,args.sample,chr)	
+#		vcf_file = "/share/jmkidd/songsy/complete-genomics/MKK/%s.chr%s.phased.vcf.gz" %(args.sample,chr)
+#		mask_file = "/share/jmkidd/songsy/complete-genomics/MKK/%s_chr%s.mask.bed.gz" %(args.sample,chr)
 		mask=read_trf_file(mask_file)
 		het,total_length,random=parse_vcf(vcf_file,mask[str(chr)],locus['chr'+str(chr)],trf['chr'+str(chr)],fasta_file,hg19_seq)      # sys.argv[3] True if I made them after BSNP output, false if otherwise
 		print >>outfile,chr,het,random,total_length,float(het)/total_length

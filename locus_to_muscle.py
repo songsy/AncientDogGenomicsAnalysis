@@ -6,13 +6,14 @@
 import glob
 import os
 import sys
+import argparse
 
 def import_sample_name(a):
-	sample_name=a+["chimp"] 
+	sample_name=a
 	return sample_name
 
 def read_locus_file(file):              # locus interval is bed format, zero based, transform into 1-based
-	locus={}
+	locus=[]
 	dict={}
 	f=open(file,"r")
 	for line in f:
@@ -29,10 +30,8 @@ def read_locus_file(file):              # locus interval is bed format, zero bas
 		chr = col[0]
 		pos1 = col[1].split("-")[0]
 		pos2 = col[1].split("-")[1]
-		if chr not in locus.keys():
-			locus[chr]=[]
-		locus[chr].append([chr,int(pos1)+1,int(pos2),info])   # first human then chimp
-		dict[info]=line[3]	#map chimp to human
+		locus.append([chr,int(pos1)+1,int(pos2),info])   # first human then chimp
+		dict[info]="%s:%i-%i" %(chr,int(pos1)+1,int(pos2))	#map chimp to human
 #	print len(locus)
 	return locus,dict
 
@@ -112,14 +111,14 @@ def print_locus(file,locus):
 		print >>f,"\t".join(map(str,i))
 	
 def fasta_to_muscle(sample_name,strand,dict,muscle_dir):
+	f_cmd=open('muscle.cmds','w')
 	for i in sample_name:
-		file = i + "_within-locus.fa"
-#		file = i + "_test.fa"
+		file = "locus-%s.fa" %(i)
 		with open(file,"r") as f1:
 			for line in f1:
 				if line.startswith('>'):
-					tag=line.strip()[1:].split(" ")[0].replace(".",":")
-					tag_hg = line.strip()[1:].split(" ")[1]
+					tag=line.strip()[1:].split(" ")[0].replace('.',':')
+					tag_chimp = line.strip()[1:].split(" ")[1]
 					length=line.strip()[1:].split(" ")[2]
 					f=open(muscle_dir+"/"+tag+".fa","a")
 					print >>f,">%s:%s %s" %(i,tag,length)
@@ -127,28 +126,57 @@ def fasta_to_muscle(sample_name,strand,dict,muscle_dir):
 					print >>f,line.strip()
 					f.close()
 		f1.close()
+		file = "locus-%s-hap1.fa" %(i)
+		with open(file,"r") as f1:
+			for line in f1:
+				if line.startswith('>'):
+					tag=line.strip()[1:].split(" ")[0].replace('.',':')
+					tag_chimp = line.strip()[1:].split(" ")[1]
+					length=line.strip()[1:].split(" ")[2]
+					f=open(muscle_dir+"/"+tag+".fa","a")
+					print >>f,">%s.1:%s %s" %(i,tag,length)
+				else:
+					print >>f,line.strip()
+					f.close()
+		f1.close()
+		file = "locus-%s-hap2.fa" %(i)
+		with open(file,"r") as f1:
+			for line in f1:
+				if line.startswith('>'):
+					tag=line.strip()[1:].split(" ")[0].replace('.',':')
+					tag_chimp = line.strip()[1:].split(" ")[1]
+					length=line.strip()[1:].split(" ")[2]
+					f=open(muscle_dir+"/"+tag+".fa","a")
+					print >>f,">%s.2:%s %s" %(i,tag,length)
+				else:
+					print >>f,line.strip()
+					f.close()
+		f1.close()
 	seq=""
-	with open("locus-hg19-new.fa","r") as f2:
+	with open("locus-chimp.fa","r") as f2:
 		for line in f2:
 			if line.startswith('>'):
-				if seq!="":
-					if strand.has_key(tag_hg) and strand[tag_hg][1]=="-":
-						seq=reverse_comp(seq)
-					print >>f, seq
-					f.close()
-					cmd = "muscle -in %s/%s.fa -out %s/%s.aln" %(muscle_dir,tag,muscle_dir,tag)
-					os.popen(cmd)
 				seq = ""
-				tag_hg=line.strip()[1:]
-				tag=dict[tag_hg]
+				tag_chimp=line.strip()[1:]
+				tag=dict[tag_chimp]
+				chr = tag.split(':')[0]
+				done = False
 				f=open(muscle_dir+"/"+ tag+".fa","a")
-				print >>f,">human:%s" %(tag_hg)
+				print >>f,">chimp:%s" %(tag_chimp)
 			else:
-				seq+= line.strip()	
+				if done is True:
+					continue
+				seq+= line.strip()
+				if strand.has_key(tag_chimp) and strand[tag_chimp][1]=="-":
+					seq=reverse_comp(seq)
+				print >>f, seq
+				f.close()
+				cmd = "muscle -in %s/%s.fa -out %s/%s.aln" %(muscle_dir,tag,muscle_dir,tag)
+				print >>f_cmd,cmd
 	f2.close()
 
 def reverse_comp(seq):
-	reverse={"A":"T","T":"A","C":"G","G":"C"}
+	reverse={"A":"T","T":"A","C":"G","G":"C","N":"N"}
 	new_seq=""
 	for i in seq[::-1]:
 		new_seq+=reverse[i.upper()]
@@ -218,16 +246,20 @@ def comparison(seq1,seq2):
 			length+=1
 	return dist,length
 			
-def aln_to_fasta(outfile,sample_name,locus,muscle_dir):
+def aln_to_fasta(outfile,sample,locus,muscle_dir):
 	f=open(outfile,"w")
 	remove_locus=[]
-	print >>f,"26250"
+	print >>f,"37438"
 	f.write("\n")
 #	f_heter = open("locus_heterozygosity_2E4W1R","w")
 #	print >>f_heter,"chrom\tpos1\tpos2\thet_Victoria\thet_9732\thet_X00108\thet_KB3784\tdiv_Victoria\tdiv_9732\tdiv_X00108\tdiv_KB3784"
 	f_matrix=open("dist_matrix_" + outfile.replace("_neutral.txt",""),"w")
-#	sample_name.append("gorGor3")
-	sample_name.append("human")
+	sample_name=[]
+	for i in range(len(sample)):
+		sample_name.append(sample[i])
+		sample_name.append(sample[i]+'.1')
+		sample_name.append(sample[i]+'.2')
+	sample_name.append("chimp")
 	matrix=[]              # set up the matrix to record the distance
 	size = []				# record the total length of each comparison
 	heter={}
@@ -253,16 +285,16 @@ def aln_to_fasta(outfile,sample_name,locus,muscle_dir):
 		record=read_in_seq(aln_file)
 		record=remove_gap(record)
 		record,seq_length=remove_CG(record)
-		seq_length=len(record["Victoria"])
+		seq_length=len(record["NA12878"])
 		for j in range(len(sample_name)):
 			for k in range(j+1,len(sample_name)):
 				dist,length=comparison(record[sample_name[j]],record[sample_name[k]])
 				if length==0:
 					zero = True
 					print "remove locus",i
-				if sample_name[j]=="Victoria" and sample_name[k]=="human" and length!=0:
+				if sample_name[j]=="NA12878" and sample_name[k]=="chimp" and length!=0:
 					print "locus dist",i,dist,length,dist/length
-				if sample_name[k]=="human" and sample_name[j]!="human" and length!=0:
+				if sample_name[k]=="chimp" and sample_name[j]!="chimp" and length!=0:
 					div[sample_name[j]]=dist/length
 				matrix[j][k]+=dist
 				size[j][k]+=length
@@ -305,29 +337,19 @@ if __name__=="__main__":
 	parser.add_argument("--muscle_dir",dest='muscle_dir',help="muscle dir")
 	parser.add_argument("--outfile", dest='outfile',help="output file")
 	parser.add_argument("--locusfile", dest='locus_file',help="locus bed file")
-
+	args = parser.parse_args()
 	if os.path.isdir(args.muscle_dir) is False:
 		os.popen("mkdir "+muscle_dir)
 
-	sample_name=import_sample_name(a)
+	sample_name=import_sample_name(args.sample)
 	print sample_name
 	locus_file = "locus-chimp.bed"
 	locus,dict=read_locus_file(locus_file)
 #	dict = get_coordinate(sample_name)
 	strand,locus=blat_to_strand("locus_chimp_hg19.psl",dict,locus)
-"""
-file = "locus_final.bed"
-print_locus(file,locus)
-for i in strand:
-	print i,"\t","\t".join(map(str,strand[i]))
-for i in strand:
-	if strand[i][1]=="-":
-		print "-",i,strand[i]
-	if strand[i][0]<=900:
-		print i,strand[i]
-"""	
-	fasta_to_muscle(sample_name,strand,dict,muscle_dir)
-	remove_locus=aln_to_fasta(args.outfile,sample_name,locus,muscle_dir)
+
+#	fasta_to_muscle(sample_name,strand,dict,args.muscle_dir)
+	remove_locus=aln_to_fasta(args.outfile,sample_name,locus,args.muscle_dir)
 
 	for i in remove_locus:
 		locus.remove(i)
